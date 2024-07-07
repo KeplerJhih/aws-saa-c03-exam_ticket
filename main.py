@@ -41,10 +41,10 @@ def extract_questions_from_pdf(pdf_path):
             elif re.match(r'^[A-F]\.', line):
                 in_options = True
                 options.append(line)
-            elif '正确答案' in line:
-                answer_match = re.search(r'正确答案[:：]\s*([A-F]+)', line)
+            elif re.match(r'(正确答案[:：]?\s*[A-F\s]+)|(^\d+\.正确答案\s+[A-F\s]+)', line):
+                answer_match = re.search(r'[A-F]+', line)
                 if answer_match:
-                    answer = answer_match.group(1)
+                    answer = answer_match.group()
                 else:
                     print(f"警告：在问题 {question_number} 中没有找到正确答案格式")
                 in_options = False
@@ -70,9 +70,8 @@ def extract_questions_from_pdf(pdf_path):
     print(f"從 {pdf_path} 中提取了 {len(questions)} 個問題")
     return questions
 
-def add_incorrect_answer_to_pdf(incorrect_answer, filename):
-    temp_buffer = BytesIO()
-    doc = SimpleDocTemplate(temp_buffer, pagesize=letter, 
+def add_incorrect_answers_to_pdf(incorrect_answers, filename):
+    doc = SimpleDocTemplate(filename, pagesize=letter, 
                             rightMargin=72, leftMargin=72, 
                             topMargin=72, bottomMargin=18)
 
@@ -84,41 +83,25 @@ def add_incorrect_answer_to_pdf(incorrect_answer, filename):
 
     story = []
 
-    question_text = re.sub(r'\s+', ' ', incorrect_answer['question'])
-    question_text = re.sub(r'AWS\s+AWS。.*$', '', question_text)
+    for incorrect_answer in incorrect_answers:
+        question_text = re.sub(r'\s+', ' ', incorrect_answer['question'])
+        question_text = re.sub(r'AWS\s+AWS。.*$', '', question_text)
 
-    story.append(Paragraph(incorrect_answer['number'], styles['Heading2']))
-    story.append(Spacer(1, 0.1*inch))
+        story.append(Paragraph(incorrect_answer['number'], styles['Heading2']))
+        story.append(Spacer(1, 0.1*inch))
 
-    story.append(Paragraph(question_text, styles['Chinese']))
-    story.append(Spacer(1, 0.1*inch))
+        story.append(Paragraph(question_text, styles['Chinese']))
+        story.append(Spacer(1, 0.1*inch))
 
-    for option in incorrect_answer['options']:
-        story.append(Paragraph(option, styles['Chinese']))
-    story.append(Spacer(1, 0.1*inch))
+        for option in incorrect_answer['options']:
+            story.append(Paragraph(option, styles['Chinese']))
+        story.append(Spacer(1, 0.1*inch))
 
-    story.append(Paragraph(f"正确答案：{incorrect_answer['correct_answer']}", styles['Chinese']))
-    story.append(Paragraph(f"您的答案：{incorrect_answer['user_answer']}", styles['Chinese']))
-    story.append(Spacer(1, 0.2*inch))
+        story.append(Paragraph(f"正确答案：{incorrect_answer['correct_answer']}", styles['Chinese']))
+        story.append(Paragraph(f"您的答案：{incorrect_answer['user_answer']}", styles['Chinese']))
+        story.append(Spacer(1, 0.2*inch))
 
     doc.build(story)
-
-    temp_buffer.seek(0)
-    new_pdf = PdfReader(temp_buffer)
-    
-    if os.path.exists(filename):
-        existing_pdf = PdfReader(open(filename, "rb"))
-        output = PdfWriter()
-        for page in existing_pdf.pages:
-            output.add_page(page)
-    else:
-        output = PdfWriter()
-
-    output.add_page(new_pdf.pages[0])
-
-    with open(filename, "wb") as outputStream:
-        output.write(outputStream)
-
     print(f"错误答案已添加到 {filename}")
 
 def quiz(questions, num_questions):
@@ -126,10 +109,11 @@ def quiz(questions, num_questions):
     selected_questions = questions[:num_questions]  # 选择指定数量的题目
     total_questions = len(selected_questions)
     correct_count = 0
+    incorrect_answers = []
 
     os.makedirs('err', exist_ok=True)
     today = date.today().strftime("%Y%m%d")
-    filename = os.path.join('err', f"{today}.pdf")
+    base_filename = os.path.join('err', f"{today}")
 
     for index, q in enumerate(selected_questions, 1):
         print(f"\n{q['number']}")
@@ -151,29 +135,38 @@ def quiz(questions, num_questions):
             correct_count += 1
         else:
             print(f"不正确。正确答案是 {','.join(sorted(correct_answer_set)) if correct_answer_set else '未知'}。")
-            incorrect_answer = {
+            incorrect_answers.append({
                 "number": q['number'],
                 "question": q['question'],
                 "options": q['options'],
                 "correct_answer": q['answer'] if q['answer'] is not None else "未知",
                 "user_answer": user_answer
-            }
-            add_incorrect_answer_to_pdf(incorrect_answer, filename)
+            })
         
         print(f"\n--- 问题 {index}/{total_questions} 完成 ---")
         print("-" * 40)
 
     print(f"\n测验完成！您的得分是 {correct_count}/{total_questions}。")
 
+    if incorrect_answers:
+        pdf_count = 1
+        filename = f"{base_filename}_{pdf_count}.pdf"
+        while os.path.exists(filename):
+            pdf_count += 1
+            filename = f"{base_filename}_{pdf_count}.pdf"
+        add_incorrect_answers_to_pdf(incorrect_answers, filename)
+
 if __name__ == "__main__":
-    pdf_files = [f for f in os.listdir('.') if f.endswith('.pdf')]
+    exam_ticket_dir = 'exam_ticket'
+    pdf_files = [f for f in os.listdir(exam_ticket_dir) if f.endswith('.pdf')]
     if not pdf_files:
-        print("当前目录下没有找到PDF文件。")
+        print("exam_ticket 目录下没有找到PDF文件。")
     else:
         all_questions = []
         for pdf_file in pdf_files:
+            pdf_path = os.path.join(exam_ticket_dir, pdf_file)
             print(f"正在处理文件：{pdf_file}")
-            questions = extract_questions_from_pdf(pdf_file)
+            questions = extract_questions_from_pdf(pdf_path)
             all_questions.extend(questions)
             print(f"当前总问题数：{len(all_questions)}")
         
