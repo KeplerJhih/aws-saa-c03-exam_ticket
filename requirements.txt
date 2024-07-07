@@ -1,0 +1,5 @@
+pdfminer.six==20221105
+nltk==3.6.5
+pandas==1.3.4
+reportlab
+matplotlib

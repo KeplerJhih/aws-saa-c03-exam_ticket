@@ -1,0 +1,10 @@
+version: '3.7'
+services:
+  saa-c03:
+    container_name: saa-c03
+    build: .
+    volumes:
+      - .:/app
+    working_dir: /app
+    tty: true
+    stdin_open: true
