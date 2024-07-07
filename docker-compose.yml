@@ -8,3 +8,4 @@ services:
     working_dir: /app
     tty: true
     stdin_open: true
+    # command: ["sh", "-c", "pip3 install -r requirements.txt"]
