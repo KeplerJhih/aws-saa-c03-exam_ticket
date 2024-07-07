@@ -1,5 +1,6 @@
 import os
 import re
+import random
 from io import StringIO, BytesIO
 from datetime import date
 from pdfminer.high_level import extract_text_to_fp
@@ -44,6 +45,8 @@ def extract_questions_from_pdf(pdf_path):
                 answer_match = re.search(r'正确答案[:：]\s*([A-F]+)', line)
                 if answer_match:
                     answer = answer_match.group(1)
+                else:
+                    print(f"警告：在问题 {question_number} 中没有找到正确答案格式")
                 in_options = False
             elif in_options and line:
                 if options:
@@ -54,9 +57,12 @@ def extract_questions_from_pdf(pdf_path):
                 question_text.append(line)
 
         if question_number and question_text:
+            question_text = ' '.join(question_text)
+            question_text = re.sub(r'\s+', ' ', question_text)
+            question_text = re.sub(r'AWS\s+AWS。.*$', '', question_text)
             questions.append({
                 "number": question_number,
-                "question": ' '.join(question_text),
+                "question": question_text,
                 "options": options,
                 "answer": answer
             })
@@ -78,10 +84,13 @@ def add_incorrect_answer_to_pdf(incorrect_answer, filename):
 
     story = []
 
+    question_text = re.sub(r'\s+', ' ', incorrect_answer['question'])
+    question_text = re.sub(r'AWS\s+AWS。.*$', '', question_text)
+
     story.append(Paragraph(incorrect_answer['number'], styles['Heading2']))
     story.append(Spacer(1, 0.1*inch))
 
-    story.append(Paragraph(incorrect_answer['question'], styles['Chinese']))
+    story.append(Paragraph(question_text, styles['Chinese']))
     story.append(Spacer(1, 0.1*inch))
 
     for option in incorrect_answer['options']:
@@ -112,15 +121,17 @@ def add_incorrect_answer_to_pdf(incorrect_answer, filename):
 
     print(f"错误答案已添加到 {filename}")
 
-def quiz(questions):
-    total_questions = len(questions)
+def quiz(questions, num_questions):
+    random.shuffle(questions)  # 随机打乱题目顺序
+    selected_questions = questions[:num_questions]  # 选择指定数量的题目
+    total_questions = len(selected_questions)
     correct_count = 0
 
     os.makedirs('err', exist_ok=True)
     today = date.today().strftime("%Y%m%d")
     filename = os.path.join('err', f"{today}.pdf")
 
-    for index, q in enumerate(questions, 1):
+    for index, q in enumerate(selected_questions, 1):
         print(f"\n{q['number']}")
         print(q['question'])
         for option in q['options']:
@@ -128,18 +139,23 @@ def quiz(questions):
         
         user_answer = input("\n您的答案是 (可多选，用逗号分隔，如 A,B): ").upper().replace(" ", "")
         user_answer_set = set(user_answer.split(','))
-        correct_answer_set = set(q['answer'])
+        
+        if q['answer'] is None:
+            print("警告：此问题没有正确答案。")
+            correct_answer_set = set()
+        else:
+            correct_answer_set = set(q['answer'])
         
         if user_answer_set == correct_answer_set:
             print("正确!")
             correct_count += 1
         else:
-            print(f"不正确。正确答案是 {','.join(sorted(correct_answer_set))}。")
+            print(f"不正确。正确答案是 {','.join(sorted(correct_answer_set)) if correct_answer_set else '未知'}。")
             incorrect_answer = {
                 "number": q['number'],
                 "question": q['question'],
                 "options": q['options'],
-                "correct_answer": q['answer'],
+                "correct_answer": q['answer'] if q['answer'] is not None else "未知",
                 "user_answer": user_answer
             }
             add_incorrect_answer_to_pdf(incorrect_answer, filename)
@@ -163,15 +179,13 @@ if __name__ == "__main__":
         
         print(f"\n总共找到 {len(all_questions)} 个问题。")
         
-        for i, q in enumerate(all_questions[:5], 1):
-            print(f"\n问题 {i}:")
-            print(f"编号: {q['number']}")
-            print(f"问题: {q['question'][:50]}...")
-            print(f"选项数: {len(q['options'])}")
+        num_questions = int(input("请输入您想练习的题目数量："))
+        while num_questions <= 0 or num_questions > len(all_questions):
+            print(f"请输入一个在1到{len(all_questions)}之间的数字。")
+            num_questions = int(input("请重新输入您想练习的题目数量："))
         
-        input("准备好开始测验了吗？按回车键开始...")
         print("\n测验开始！")
         print("=" * 40)
-        quiz(all_questions)
+        quiz(all_questions, num_questions)
         print("=" * 40)
         print("测验结束！")
