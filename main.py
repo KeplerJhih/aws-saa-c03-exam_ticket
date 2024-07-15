@@ -171,7 +171,8 @@ if __name__ == "__main__":
             print(f"当前总问题数：{len(all_questions)}")
         
         print(f"\n总共找到 {len(all_questions)} 个问题。")
-        
+        print(f"AWS SAA 考試題目有65題，滿分1000分及格分數為720分")
+        print(f"也就是差不多最少需要答對47題(相當於只能錯18題) 表定考試時間為130分鐘")
         num_questions = int(input("请输入您想练习的题目数量："))
         while num_questions <= 0 or num_questions > len(all_questions):
             print(f"请输入一个在1到{len(all_questions)}之间的数字。")
